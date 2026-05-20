@@ -268,7 +268,7 @@ function App() {
         borderRadius: '8px'
       }}>
         <h2 style={{ margin: 0, color: '#00a86b', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          🍳 My Recipe Box
+          🔒 My Private Recipe Vault
         </h2>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
