@@ -52,8 +52,15 @@ function App() {
 
   // 🔒 THE PRIVATE VAULT FILTER 🔒
   const fetchRecipes = () => {
-    fetch('https://recipebox-api-yz4h.onrender.com/api/recipes')
-      .then(response => response.json())
+    fetch('https://recipebox-api-yz4h.onrender.com/api/recipes', {
+      headers: {
+        'Authorization': `Bearer ${token}` // <-- THE SECURITY PASS
+      }
+    })
+      .then(response => {
+        if (!response.ok) throw new Error("Unauthorized or server error");
+        return response.json();
+      })
       .then(data => {
         // Look at every recipe from the cloud. Only keep the ones where 
         // the author's username perfectly matches your current profile username.
@@ -132,7 +139,11 @@ function App() {
   };
 
   const handleTagClick = (tagWord) => {
-    fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?tag=${tagWord}`)
+    fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?tag=${tagWord}`, {
+      headers: {
+        'Authorization': `Bearer ${token}` // <-- THE SECURITY PASS
+      }
+    })
       .then(res => {
         if (!res.ok) throw new Error("Tag filter failed");
         return res.json();
@@ -358,8 +369,15 @@ function App() {
               const val = e.target.value;
               if (val.trim() === '') fetchRecipes();
               else {
-                fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?query=${val}`)
-                  .then(res => res.json())
+                fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?query=${val}`, {
+                  headers: {
+                    'Authorization': `Bearer ${token}` // <-- THE SECURITY PASS
+                  }
+                })
+                  .then(res => {
+                    if (!res.ok) throw new Error("Search filter failed");
+                    return res.json();
+                  })
                   .then(data => {
                     // Apply the same private filter to the search bar!
                     const myFilteredRecipes = data.filter(recipe => 
