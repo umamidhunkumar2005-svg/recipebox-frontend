@@ -49,10 +49,20 @@ function App() {
   // PHASE 3: REVIEW STATE TRACKING
   const [reviewData, setReviewData] = useState({});
 
+  // 🔒 THE PRIVATE VAULT FILTER 🔒
   const fetchRecipes = () => {
     fetch('https://recipebox-api-yz4h.onrender.com/api/recipes')
       .then(response => response.json())
-      .then(data => setRecipes(data))
+      .then(data => {
+        // Look at every recipe from the cloud. Only keep the ones where 
+        // the author's username perfectly matches your current profile username.
+        const myPrivateRecipes = data.filter(recipe => 
+          recipe.author?.username === userProfile.username
+        );
+        
+        // Save ONLY your private recipes to the screen
+        setRecipes(myPrivateRecipes);
+      })
       .catch(error => console.error("Error fetching data:", error));
   };
 
@@ -126,7 +136,13 @@ function App() {
         if (!res.ok) throw new Error("Tag filter failed");
         return res.json();
       })
-      .then(data => setRecipes(data))
+      .then(data => {
+        // Apply the same private filter to search results!
+        const myFilteredRecipes = data.filter(recipe => 
+          recipe.author?.username === userProfile.username
+        );
+        setRecipes(myFilteredRecipes);
+      })
       .catch(err => console.error(err));
   };
 
@@ -343,7 +359,13 @@ function App() {
               else {
                 fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?query=${val}`)
                   .then(res => res.json())
-                  .then(data => setRecipes(data))
+                  .then(data => {
+                    // Apply the same private filter to the search bar!
+                    const myFilteredRecipes = data.filter(recipe => 
+                      recipe.author?.username === userProfile.username
+                    );
+                    setRecipes(myFilteredRecipes);
+                  })
                   .catch(err => console.error(err));
               }
             }}
