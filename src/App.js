@@ -7,11 +7,13 @@ function App() {
   const [token, setToken] = useState(sessionStorage.getItem('token') || '');
   const [isRegistering, setIsRegistering] = useState(false);
   
+  // 🌟 State can now be 'vault', 'feed', 'explore', OR 'chefProfile'
   const [viewMode, setViewMode] = useState('vault');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // 🌟 NEW: State to hold the profiles of chefs you follow
   const [followedChefs, setFollowedChefs] = useState([]);
+  // 🌟 NEW: Store the specific profile we are looking at
+  const [selectedChefProfile, setSelectedChefProfile] = useState(null); 
 
   // DYNAMIC PAYLOAD EXTRACTOR
   const getUserDetails = () => {
@@ -62,9 +64,8 @@ function App() {
       .catch(error => console.error("Error fetching data:", error));
   };
 
-  // 🌐 FETCH SOCIAL FEED & CHEF PROFILES
+  // 🌐 FETCH SOCIAL FEED
   const fetchSocialFeed = () => {
-    // 1. Fetch the Recipes
     fetch('https://recipebox-api-yz4h.onrender.com/api/recipes/feed', { 
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -75,7 +76,6 @@ function App() {
       })
       .catch(error => console.error("Error fetching feed:", error));
 
-    // 2. 🌟 NEW: Fetch the Chef Profiles for the top carousel
     fetch('https://recipebox-api-yz4h.onrender.com/api/users/following', { 
       headers: { 'Authorization': `Bearer ${token}` }
     })
@@ -100,6 +100,21 @@ function App() {
         setViewMode('explore');
       })
       .catch(error => console.error("Error fetching explore feed:", error));
+  };
+
+  // 🌟 NEW: FETCH SINGLE CHEF PROFILE
+  const fetchChefProfile = (chefId) => {
+    // We run two fetches at the exact same time: one for the Profile Data, one for the Recipes
+    Promise.all([
+      fetch(`https://recipebox-api-yz4h.onrender.com/api/users/${chefId}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(res => res.json()),
+      fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/chef/${chefId}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(res => res.json())
+    ])
+    .then(([profileData, recipesData]) => {
+      setSelectedChefProfile(profileData);
+      setRecipes(recipesData);
+      setViewMode('chefProfile');
+    })
+    .catch(error => console.error("Error fetching chef profile:", error));
   };
 
   // 🔎 SEARCH RECIPES
@@ -179,7 +194,6 @@ function App() {
     }
   };
 
-  // 🌟 FOLLOW/UNFOLLOW LOGIC
   const handleFollow = (targetChefId, targetUsername) => {
     fetch(`https://recipebox-api-yz4h.onrender.com/api/users/${targetChefId}/follow`, {
       method: 'POST',
@@ -191,8 +205,10 @@ function App() {
     })
     .then(data => {
       alert(data.message); 
+      // Refresh whichever view we are currently looking at
       if (viewMode === 'explore') fetchExploreRecipes();
       else if (viewMode === 'feed') fetchSocialFeed();
+      else if (viewMode === 'chefProfile') fetchChefProfile(targetChefId); // Refresh profile stats!
       else fetchVaultRecipes();
     })
     .catch(err => {
@@ -266,7 +282,9 @@ function App() {
     .then(() => {
       if (viewMode === 'explore') fetchExploreRecipes();
       else if (viewMode === 'feed') fetchSocialFeed();
+      else if (viewMode === 'chefProfile') fetchChefProfile(selectedChefProfile._id);
       else fetchVaultRecipes();
+      
       setReviewData(prev => ({ ...prev, [recipeId]: { rating: 5, comment: '' } })); 
     });
   };
@@ -314,6 +332,7 @@ function App() {
           {viewMode === 'vault' && "🔒 My Private Recipe Vault"}
           {viewMode === 'feed' && "🌐 My Social Feed"}
           {viewMode === 'explore' && "🔍 Explore Global Recipes"}
+          {viewMode === 'chefProfile' && "🧑‍🍳 Chef Profile"}
         </h2>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -396,14 +415,18 @@ function App() {
         </div>
       )}
 
-      {/* 🌟 NEW: HORIZONTAL PROFILES LIST (ONLY IN SOCIAL FEED) */}
+      {/* HORIZONTAL PROFILES LIST (SOCIAL FEED) */}
       {viewMode === 'feed' && followedChefs.length > 0 && (
         <div style={{ padding: '0 30px', marginBottom: '25px' }}>
           <h3 style={{ color: '#2d3748', margin: '0 0 15px 0', fontSize: '18px' }}>Chefs You Follow</h3>
           
           <div style={{ display: 'flex', gap: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
             {followedChefs.map(chef => (
-              <div key={chef._id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', cursor: 'pointer' }}>
+              <div 
+                key={chef._id} 
+                onClick={() => fetchChefProfile(chef._id)} // 🌟 NEW: Clicking Avatar loads Profile!
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', cursor: 'pointer' }}
+              >
                 <img 
                   src={chef.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
                   alt={chef.username}
@@ -417,6 +440,36 @@ function App() {
             ))}
           </div>
           <hr style={{ marginTop: '15px', borderTop: '1px solid #edf2f7' }} />
+        </div>
+      )}
+
+      {/* 🌟 NEW: DEDICATED CHEF PROFILE HEADER */}
+      {viewMode === 'chefProfile' && selectedChefProfile && (
+        <div style={{ margin: '0 30px 30px 30px', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+           <img 
+              src={selectedChefProfile.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
+              alt={selectedChefProfile.username}
+              style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #00a86b', marginBottom: '15px' }}
+           />
+           <h2 style={{ margin: '0 0 10px 0', color: '#1a202c', fontSize: '28px' }}>@{selectedChefProfile.username}</h2>
+           <p style={{ margin: '0 auto 20px auto', color: '#4a5568', fontStyle: 'italic', maxWidth: '600px', fontSize: '16px' }}>
+              {selectedChefProfile.bio || "This chef prefers to let their food do the talking. No bio yet!"}
+           </p>
+
+           <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', marginBottom: '25px', fontSize: '18px' }}>
+              <div><strong style={{ color: '#2d3748' }}>{selectedChefProfile.followers?.length || 0}</strong> Followers</div>
+              <div><strong style={{ color: '#2d3748' }}>{selectedChefProfile.following?.length || 0}</strong> Following</div>
+              <div><strong style={{ color: '#2d3748' }}>{recipes.length}</strong> Recipes</div>
+           </div>
+
+           {selectedChefProfile._id !== userProfile.id && (
+             <button 
+               onClick={() => handleFollow(selectedChefProfile._id, selectedChefProfile.username)}
+               style={{ padding: '12px 30px', backgroundColor: selectedChefProfile.followers?.includes(userProfile.id) ? '#e2e8f0' : '#3182ce', color: selectedChefProfile.followers?.includes(userProfile.id) ? '#4a5568' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}
+             >
+               {selectedChefProfile.followers?.includes(userProfile.id) ? 'Following' : 'Follow Chef'}
+             </button>
+           )}
         </div>
       )}
 
@@ -455,6 +508,7 @@ function App() {
              {viewMode === 'vault' && "Your vault is empty. Add a recipe above!"}
              {viewMode === 'feed' && "Your feed is empty. Follow some chefs in the Explore tab!"}
              {viewMode === 'explore' && "There are no other recipes on the platform right now!"}
+             {viewMode === 'chefProfile' && "This chef hasn't posted any recipes yet!"}
            </p>
         ) : null}
         
@@ -536,8 +590,13 @@ function App() {
                 </div>
 
                 <div className="card-footer" style={{ marginTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="chef-name" style={{ fontWeight: 'bold', color: '#2d3748' }}>
-                    Chef: {recipe.author?.username || 'Unknown'}
+                  {/* 🌟 NEW: Clicking the author name on any card now opens their profile! */}
+                  <span 
+                    className="chef-name" 
+                    onClick={() => fetchChefProfile(authorId)}
+                    style={{ fontWeight: 'bold', color: '#3182ce', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Chef: @{recipe.author?.username || 'Unknown'}
                   </span>
                   
                   <div style={{ display: 'flex', gap: '10px' }}>
@@ -548,8 +607,7 @@ function App() {
                         onClick={() => handleFollow(authorId, recipe.author?.username)}
                         style={{ padding: '8px 12px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                       >
-                        {/* Dynamic button text! If we are in the feed, we must be following them, so show 'Unfollow' */}
-                        {viewMode === 'feed' ? 'Unfollow Chef' : 'Follow Chef'}
+                        Follow Chef
                       </button>
                     )}
                   </div>
