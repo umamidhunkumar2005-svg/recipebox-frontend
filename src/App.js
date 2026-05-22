@@ -199,16 +199,26 @@ function App() {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}` }
     })
-    .then(res => {
-      if (!res.ok) throw new Error("Follow action failed");
-      return res.json();
-    })
+    .then(res => res.json())
     .then(data => {
       alert(data.message); 
-      // Refresh whichever view we are currently looking at
+      
+      // 1. Refresh my own profile stats in the sidebar
+      // (Assuming you have a fetchMyProfile function or just trigger a refresh)
+      
+      // 2. Refresh the list of chefs I follow so the UI knows the relationship changed
+      fetch('https://recipebox-api-yz4h.onrender.com/api/users/following', { 
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if(Array.isArray(data)) setFollowedChefs(data);
+      });
+
+      // 3. Refresh the current view so the Follow/Unfollow buttons update
       if (viewMode === 'explore') fetchExploreRecipes();
       else if (viewMode === 'feed') fetchSocialFeed();
-      else if (viewMode === 'chefProfile') fetchChefProfile(targetChefId); // Refresh profile stats!
+      else if (viewMode === 'chefProfile') fetchChefProfile(targetChefId); 
       else fetchVaultRecipes();
     })
     .catch(err => {
@@ -424,7 +434,7 @@ function App() {
             {followedChefs.map(chef => (
               <div 
                 key={chef._id} 
-                onClick={() => fetchChefProfile(chef._id)} // 🌟 NEW: Clicking Avatar loads Profile!
+                onClick={() => fetchChefProfile(chef._id)} 
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', cursor: 'pointer' }}
               >
                 <img 
@@ -443,7 +453,7 @@ function App() {
         </div>
       )}
 
-      {/* 🌟 NEW: DEDICATED CHEF PROFILE HEADER */}
+      {/* DEDICATED CHEF PROFILE HEADER */}
       {viewMode === 'chefProfile' && selectedChefProfile && (
         <div style={{ margin: '0 30px 30px 30px', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
            <img 
