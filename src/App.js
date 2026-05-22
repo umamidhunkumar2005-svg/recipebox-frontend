@@ -9,6 +9,9 @@ function App() {
   
   // 🌟 State can now be 'vault', 'feed', or 'explore'
   const [viewMode, setViewMode] = useState('vault');
+  
+  // 🌟 NEW: Search state
+  const [searchQuery, setSearchQuery] = useState('');
 
   // DYNAMIC PAYLOAD EXTRACTOR
   const getUserDetails = () => {
@@ -89,6 +92,25 @@ function App() {
         setViewMode('explore');
       })
       .catch(error => console.error("Error fetching explore feed:", error));
+  };
+
+  // 🔎 SEARCH RECIPES
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return; // Don't search if the box is empty
+
+    fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?query=${searchQuery}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(response => {
+      if (!response.ok) throw new Error("Search failed");
+      return response.json();
+    })
+    .then(data => {
+      setRecipes(data);
+      setViewMode('explore'); // Keep them in the explore view to see results
+    })
+    .catch(error => console.error("Error searching:", error));
   };
 
   // Run on initial login
@@ -341,6 +363,34 @@ function App() {
           </button>
         </div>
       </div>
+
+      {/* 🌟 NEW: SEARCH BAR (ONLY IN EXPLORE VIEW) */}
+      {viewMode === 'explore' && (
+        <div style={{ padding: '0 30px', marginBottom: '20px' }}>
+          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', maxWidth: '600px', margin: '0 auto' }}>
+            <input 
+              type="text" 
+              placeholder="Search for a recipe title or ingredient..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{ flex: 1, padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '16px' }}
+            />
+            <button 
+              type="submit" 
+              style={{ padding: '12px 24px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              Search
+            </button>
+            <button 
+              type="button" 
+              onClick={() => { setSearchQuery(''); fetchExploreRecipes(); }} // Clear search and reset
+              style={{ padding: '12px 16px', backgroundColor: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+            >
+              Clear
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* ONLY SHOW CREATION FORM IN VAULT VIEW */}
       {viewMode === 'vault' && (
