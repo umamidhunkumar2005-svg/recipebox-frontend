@@ -7,7 +7,7 @@ function App() {
   const [token, setToken] = useState(sessionStorage.getItem('token') || '');
   const [isRegistering, setIsRegistering] = useState(false);
   
-  // 🌟 NEW: State to track which view the user is on ('vault' or 'feed')
+  // 🌟 State can now be 'vault', 'feed', or 'explore'
   const [viewMode, setViewMode] = useState('vault');
 
   // DYNAMIC PAYLOAD EXTRACTOR
@@ -24,7 +24,7 @@ function App() {
       return {
         username: decoded.username || decoded.user?.username || 'Active Chef',
         email: decoded.email || decoded.user?.email || 'No Email Verified',
-        id: decoded.id || decoded.user?.id || null // Extracting ID for Follow logic
+        id: decoded.id || decoded.user?.id || null 
       };
     } catch (e) {
       return { username: 'Active Chef', email: 'Connected Securely', id: null };
@@ -73,6 +73,22 @@ function App() {
         setViewMode('feed');
       })
       .catch(error => console.error("Error fetching feed:", error));
+  };
+
+  // 🔍 FETCH EXPLORE FEED (All other chefs on the platform)
+  const fetchExploreRecipes = () => {
+    fetch('https://recipebox-api-yz4h.onrender.com/api/recipes/explore', { 
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(response => {
+        if (!response.ok) throw new Error("Explore fetch failed");
+        return response.json();
+      })
+      .then(data => {
+        setRecipes(data);
+        setViewMode('explore');
+      })
+      .catch(error => console.error("Error fetching explore feed:", error));
   };
 
   // Run on initial login
@@ -124,7 +140,7 @@ function App() {
       })
       .then(async response => {
         if (response.ok) {
-          viewMode === 'vault' ? fetchVaultRecipes() : fetchSocialFeed(); 
+          fetchVaultRecipes(); 
         } else {
           const errorData = await response.json();
           alert(`Backend says: ${errorData.message}`);
@@ -134,7 +150,7 @@ function App() {
     }
   };
 
-  // 🌟 NEW: FOLLOW/UNFOLLOW LOGIC
+  // 🌟 FOLLOW/UNFOLLOW LOGIC
   const handleFollow = (targetChefId, targetUsername) => {
     fetch(`https://recipebox-api-yz4h.onrender.com/api/users/${targetChefId}/follow`, {
       method: 'POST',
@@ -145,9 +161,11 @@ function App() {
       return res.json();
     })
     .then(data => {
-      alert(data.message); // Will say "You are now following..."
-      // Refresh the current view
-      viewMode === 'vault' ? fetchVaultRecipes() : fetchSocialFeed();
+      alert(data.message); 
+      // Refresh whichever view we are currently looking at
+      if (viewMode === 'explore') fetchExploreRecipes();
+      else if (viewMode === 'feed') fetchSocialFeed();
+      else fetchVaultRecipes();
     })
     .catch(err => {
       console.error(err);
@@ -194,21 +212,13 @@ function App() {
       return response.json();
     })
     .then(() => {
-      fetchVaultRecipes(); // Always switch to vault view after creating to see the new post
+      fetchVaultRecipes(); 
       setFormData({ title: '', description: '', prepTimeMinutes: '', imageUrl: '' });
       setIngredientsText('');
       setInstructionsText('');
       setTags('');
     })
     .catch(error => alert("Submission error. Check your console logs."));
-  };
-
-  // Handle Review Actions
-  const handleReviewChange = (recipeId, field, value) => {
-    setReviewData(prev => ({
-      ...prev,
-      [recipeId]: { ...prev[recipeId], [field]: value }
-    }));
   };
 
   const handleReviewSubmit = (e, recipeId) => {
@@ -226,9 +236,18 @@ function App() {
     })
     .then(res => res.json())
     .then(() => {
-      viewMode === 'vault' ? fetchVaultRecipes() : fetchSocialFeed();
+      if (viewMode === 'explore') fetchExploreRecipes();
+      else if (viewMode === 'feed') fetchSocialFeed();
+      else fetchVaultRecipes();
       setReviewData(prev => ({ ...prev, [recipeId]: { rating: 5, comment: '' } })); 
     });
+  };
+
+  const handleReviewChange = (recipeId, field, value) => {
+    setReviewData(prev => ({
+      ...prev,
+      [recipeId]: { ...prev[recipeId], [field]: value }
+    }));
   };
 
   if (!token) {
@@ -264,7 +283,9 @@ function App() {
         borderRadius: '8px'
       }}>
         <h2 style={{ margin: 0, color: '#00a86b', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {viewMode === 'vault' ? "🔒 My Private Recipe Vault" : "🌐 My Social Feed"}
+          {viewMode === 'vault' && "🔒 My Private Recipe Vault"}
+          {viewMode === 'feed' && "🌐 My Social Feed"}
+          {viewMode === 'explore' && "🔍 Explore Global Recipes"}
         </h2>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -288,6 +309,15 @@ function App() {
                 }}
              >
                Social Feed
+             </button>
+             <button 
+                onClick={fetchExploreRecipes}
+                style={{
+                  padding: '8px 15px', backgroundColor: viewMode === 'explore' ? '#00a86b' : '#e2e8f0',
+                  color: viewMode === 'explore' ? 'white' : '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
+                }}
+             >
+               Explore
              </button>
           </div>
 
@@ -345,13 +375,13 @@ function App() {
       <div className="recipe-list">
         {recipes.length === 0 ? (
            <p className="loading-text">
-             {viewMode === 'vault' ? "Your vault is empty. Add a recipe above!" : "Your feed is empty. Follow some chefs to see their recipes!"}
+             {viewMode === 'vault' && "Your vault is empty. Add a recipe above!"}
+             {viewMode === 'feed' && "Your feed is empty. Follow some chefs in the Explore tab!"}
+             {viewMode === 'explore' && "There are no other recipes on the platform right now!"}
            </p>
         ) : null}
         
         {recipes.map(recipe => {
-          // Determine if the current logged-in user owns this recipe
-          // The recipe.author might be an object (if populated) or just an ID string
           const authorId = typeof recipe.author === 'object' ? recipe.author._id : recipe.author;
           const isOwner = authorId === userProfile.id;
 
@@ -394,7 +424,6 @@ function App() {
                   )}
                 </div>
 
-                {/* --- REVIEWS SECTION --- */}
                 <div className="reviews-container" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
                   <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#333' }}>
                     Comments & Ratings {recipe.reviews?.length > 0 ? `(${recipe.reviews.length})` : ''}
@@ -434,7 +463,6 @@ function App() {
                     Chef: {recipe.author?.username || 'Unknown'}
                   </span>
                   
-                  {/* Dynamic Action Buttons Based on Ownership */}
                   <div style={{ display: 'flex', gap: '10px' }}>
                     {isOwner ? (
                       <button className="delete-btn" onClick={() => handleDelete(recipe._id)}>Delete Post</button>
