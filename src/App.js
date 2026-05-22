@@ -4,7 +4,8 @@ import './App.css';
 
 function App() {
   const [recipes, setRecipes] = useState([]);
-  const [token, setToken] = useState(localStorage.getItem('token') || '');
+  // UPDATED: Now uses sessionStorage so each tab has isolated memory!
+  const [token, setToken] = useState(sessionStorage.getItem('token') || '');
   const [isRegistering, setIsRegistering] = useState(false);
   
   // DYNAMIC PAYLOAD EXTRACTOR
@@ -96,7 +97,8 @@ function App() {
     })
     .then(data => {
       if (data.token) {
-        localStorage.setItem('token', data.token);
+        // UPDATED: Saving to sessionStorage
+        sessionStorage.setItem('token', data.token);
         setToken(data.token);
         setAuthData({ username: '', email: '', password: '' });
       } else {
@@ -111,7 +113,8 @@ function App() {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
+    // UPDATED: Removing from sessionStorage
+    sessionStorage.removeItem('token');
     setToken('');
     setRecipes([]);
     window.location.reload(); // Hard flush to break out of persistent states
