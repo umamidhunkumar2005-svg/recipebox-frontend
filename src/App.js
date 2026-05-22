@@ -104,7 +104,6 @@ function App() {
 
   // 🌟 NEW: FETCH SINGLE CHEF PROFILE
   const fetchChefProfile = (chefId) => {
-    // We run two fetches at the exact same time: one for the Profile Data, one for the Recipes
     Promise.all([
       fetch(`https://recipebox-api-yz4h.onrender.com/api/users/${chefId}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(res => res.json()),
       fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/chef/${chefId}`, { headers: { 'Authorization': `Bearer ${token}` } }).then(res => res.json())
@@ -202,11 +201,7 @@ function App() {
     .then(res => res.json())
     .then(data => {
       alert(data.message); 
-      
-      // 1. Refresh my own profile stats in the sidebar
-      // (Assuming you have a fetchMyProfile function or just trigger a refresh)
-      
-      // 2. Refresh the list of chefs I follow so the UI knows the relationship changed
+      // Refresh the list of chefs I follow so the UI knows the relationship changed
       fetch('https://recipebox-api-yz4h.onrender.com/api/users/following', { 
         headers: { 'Authorization': `Bearer ${token}` }
       })
@@ -214,8 +209,7 @@ function App() {
       .then(data => {
         if(Array.isArray(data)) setFollowedChefs(data);
       });
-
-      // 3. Refresh the current view so the Follow/Unfollow buttons update
+      
       if (viewMode === 'explore') fetchExploreRecipes();
       else if (viewMode === 'feed') fetchSocialFeed();
       else if (viewMode === 'chefProfile') fetchChefProfile(targetChefId); 
@@ -434,7 +428,7 @@ function App() {
             {followedChefs.map(chef => (
               <div 
                 key={chef._id} 
-                onClick={() => fetchChefProfile(chef._id)} 
+                onClick={() => fetchChefProfile(chef._id)}
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', cursor: 'pointer' }}
               >
                 <img 
@@ -475,9 +469,9 @@ function App() {
            {selectedChefProfile._id !== userProfile.id && (
              <button 
                onClick={() => handleFollow(selectedChefProfile._id, selectedChefProfile.username)}
-               style={{ padding: '12px 30px', backgroundColor: selectedChefProfile.followers?.includes(userProfile.id) ? '#e2e8f0' : '#3182ce', color: selectedChefProfile.followers?.includes(userProfile.id) ? '#4a5568' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}
+               style={{ padding: '12px 30px', backgroundColor: followedChefs.some(c => c._id === selectedChefProfile._id) ? '#e2e8f0' : '#3182ce', color: followedChefs.some(c => c._id === selectedChefProfile._id) ? '#4a5568' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}
              >
-               {selectedChefProfile.followers?.includes(userProfile.id) ? 'Following' : 'Follow Chef'}
+               {followedChefs.some(c => c._id === selectedChefProfile._id) ? 'Following' : 'Follow Chef'}
              </button>
            )}
         </div>
@@ -525,6 +519,7 @@ function App() {
         {recipes.map(recipe => {
           const authorId = typeof recipe.author === 'object' ? recipe.author._id : recipe.author;
           const isOwner = authorId === userProfile.id;
+          const isFollowing = followedChefs.some(chef => chef._id === authorId);
 
           return (
             <div key={recipe._id} className="recipe-card">
@@ -614,9 +609,14 @@ function App() {
                     ) : (
                       <button 
                         onClick={() => handleFollow(authorId, recipe.author?.username)}
-                        style={{ padding: '8px 12px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ 
+                          padding: '8px 12px', 
+                          backgroundColor: isFollowing ? '#e2e8f0' : '#3182ce', 
+                          color: isFollowing ? '#4a5568' : 'white', 
+                          border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' 
+                        }}
                       >
-                        Follow Chef
+                        {isFollowing ? 'Following' : 'Follow Chef'}
                       </button>
                     )}
                   </div>
