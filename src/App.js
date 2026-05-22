@@ -48,6 +48,18 @@ function App() {
   const [tags, setTags] = useState('');
   const [reviewData, setReviewData] = useState({});
 
+  const [myFullProfile, setMyFullProfile] = useState(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileFormData, setProfileFormData] = useState({ bio: '', profilePicture: '' });
+
+  const fetchMyProfile = () => {
+    if (!userProfile.id) return;
+    fetch(`https://recipebox-api-yz4h.onrender.com/api/users/${userProfile.id}`, { headers: { 'Authorization': `Bearer ${token}` }})
+    .then(res => res.json())
+    .then(data => { setMyFullProfile(data); setProfileFormData({ bio: data.bio || '', profilePicture: data.profilePicture || '' }); })
+    .catch(err => console.error("Error fetching my profile:", err));
+  };
+
   // 🔒 FETCH PRIVATE VAULT
   const fetchVaultRecipes = () => {
     fetch('https://recipebox-api-yz4h.onrender.com/api/recipes', { 
@@ -135,8 +147,23 @@ function App() {
     .catch(error => console.error("Error searching:", error));
   };
 
+  const handleProfileUpdateSubmit = (e) => {
+    e.preventDefault();
+    fetch('https://recipebox-api-yz4h.onrender.com/api/users/update-profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(profileFormData)
+    })
+    .then(res => res.json())
+    .then(updatedData => { setMyFullProfile(updatedData); setIsEditingProfile(false); })
+    .catch(err => alert("Failed to update profile"));
+  };
+
   useEffect(() => {
-    if (token) fetchVaultRecipes();
+    if (token) {
+      fetchVaultRecipes();
+      fetchMyProfile();
+    }
   }, [token]);
 
   const handleAuthChange = (e) => setAuthData({ ...authData, [e.target.name]: e.target.value });
@@ -201,7 +228,11 @@ function App() {
     .then(res => res.json())
     .then(data => {
       alert(data.message); 
-      // Refresh the list of chefs I follow so the UI knows the relationship changed
+      
+      // 1. Refresh my own profile stats in the sidebar
+      fetchMyProfile();
+      
+      // 2. Refresh the list of chefs I follow so the UI knows the relationship changed
       fetch('https://recipebox-api-yz4h.onrender.com/api/users/following', { 
         headers: { 'Authorization': `Bearer ${token}` }
       })
@@ -209,7 +240,8 @@ function App() {
       .then(data => {
         if(Array.isArray(data)) setFollowedChefs(data);
       });
-      
+
+      // 3. Refresh the current view so the Follow/Unfollow buttons update
       if (viewMode === 'explore') fetchExploreRecipes();
       else if (viewMode === 'feed') fetchSocialFeed();
       else if (viewMode === 'chefProfile') fetchChefProfile(targetChefId); 
@@ -320,7 +352,7 @@ function App() {
   }
 
   return (
-    <div className="App">
+    <div className="App" style={{ backgroundColor: '#f0f4f8', minHeight: '100vh', paddingBottom: '50px' }}>
       {/* HEADER SECTION */}
       <div style={{
         display: 'flex',
@@ -328,9 +360,8 @@ function App() {
         alignItems: 'center',
         padding: '15px 30px',
         backgroundColor: '#ffffff',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-        marginBottom: '35px',
-        borderRadius: '8px'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+        marginBottom: '30px'
       }}>
         <h2 style={{ margin: 0, color: '#00a86b', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
           {viewMode === 'vault' && "🔒 My Private Recipe Vault"}
@@ -392,239 +423,277 @@ function App() {
         </div>
       </div>
 
-      {viewMode === 'explore' && (
-        <div style={{ padding: '0 30px', marginBottom: '20px' }}>
-          <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', maxWidth: '600px', margin: '0 auto' }}>
-            <input 
-              type="text" 
-              placeholder="Search for a recipe title or ingredient..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{ flex: 1, padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '16px' }}
-            />
-            <button 
-              type="submit" 
-              style={{ padding: '12px 24px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
-            >
-              Search
-            </button>
-            <button 
-              type="button" 
-              onClick={() => { setSearchQuery(''); fetchExploreRecipes(); }} 
-              style={{ padding: '12px 16px', backgroundColor: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
-            >
-              Clear
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* HORIZONTAL PROFILES LIST (SOCIAL FEED) */}
-      {viewMode === 'feed' && followedChefs.length > 0 && (
-        <div style={{ padding: '0 30px', marginBottom: '25px' }}>
-          <h3 style={{ color: '#2d3748', margin: '0 0 15px 0', fontSize: '18px' }}>Chefs You Follow</h3>
-          
-          <div style={{ display: 'flex', gap: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
-            {followedChefs.map(chef => (
-              <div 
-                key={chef._id} 
-                onClick={() => fetchChefProfile(chef._id)}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', cursor: 'pointer' }}
-              >
-                <img 
-                  src={chef.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
-                  alt={chef.username}
-                  style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #00a86b', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
-                  onError={(e) => { e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png"; }}
-                />
-                <span style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '8px', color: '#4a5568' }}>
-                  @{chef.username}
-                </span>
-              </div>
-            ))}
-          </div>
-          <hr style={{ marginTop: '15px', borderTop: '1px solid #edf2f7' }} />
-        </div>
-      )}
-
-      {/* DEDICATED CHEF PROFILE HEADER */}
-      {viewMode === 'chefProfile' && selectedChefProfile && (
-        <div style={{ margin: '0 30px 30px 30px', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
-           <img 
-              src={selectedChefProfile.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
-              alt={selectedChefProfile.username}
-              style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #00a86b', marginBottom: '15px' }}
-           />
-           <h2 style={{ margin: '0 0 10px 0', color: '#1a202c', fontSize: '28px' }}>@{selectedChefProfile.username}</h2>
-           <p style={{ margin: '0 auto 20px auto', color: '#4a5568', fontStyle: 'italic', maxWidth: '600px', fontSize: '16px' }}>
-              {selectedChefProfile.bio || "This chef prefers to let their food do the talking. No bio yet!"}
-           </p>
-
-           <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', marginBottom: '25px', fontSize: '18px' }}>
-              <div><strong style={{ color: '#2d3748' }}>{selectedChefProfile.followers?.length || 0}</strong> Followers</div>
-              <div><strong style={{ color: '#2d3748' }}>{selectedChefProfile.following?.length || 0}</strong> Following</div>
-              <div><strong style={{ color: '#2d3748' }}>{recipes.length}</strong> Recipes</div>
-           </div>
-
-           {selectedChefProfile._id !== userProfile.id && (
-             <button 
-               onClick={() => handleFollow(selectedChefProfile._id, selectedChefProfile.username)}
-               style={{ padding: '12px 30px', backgroundColor: followedChefs.some(c => c._id === selectedChefProfile._id) ? '#e2e8f0' : '#3182ce', color: followedChefs.some(c => c._id === selectedChefProfile._id) ? '#4a5568' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}
-             >
-               {followedChefs.some(c => c._id === selectedChefProfile._id) ? 'Following' : 'Follow Chef'}
-             </button>
-           )}
-        </div>
-      )}
-
-      {viewMode === 'vault' && (
-        <form className="recipe-form comprehensive-form" onSubmit={handleSubmit}>
-          <h3>Add New Comprehensive Recipe</h3>
-          <input name="title" placeholder="Recipe Title" value={formData.title} onChange={handleChange} required />
-          <input name="prepTimeMinutes" type="number" placeholder="Prep Time (mins)" value={formData.prepTimeMinutes} onChange={handleChange} required />
-          <input name="imageUrl" placeholder="Image URL (e.g. https://...jpg)" value={formData.imageUrl} onChange={handleChange} required={false} />
-          <textarea name="description" placeholder="Brief Summary/Description" value={formData.description} onChange={handleChange} required />
-          
-          <div className="form-section">
-            <h4>Ingredients Blueprint</h4>
-            <textarea placeholder="Example:&#10;200g Pasta&#10;2 Eggs" rows="3" value={ingredientsText} onChange={(e) => setIngredientsText(e.target.value)} required />
-          </div>
-
-          <div className="form-section">
-            <h4>Preparation Steps</h4>
-            <textarea placeholder="Example:&#10;Boil the water&#10;Cook the pasta" rows="3" value={instructionsText} onChange={(e) => setInstructionsText(e.target.value)} required />
-          </div>
-
-          <div className="form-section">
-            <h4>Tags</h4>
-            <input placeholder="Comma separated tags: Vegan, Dinner" value={tags} onChange={(e) => setTags(e.target.value)} />
-          </div>
-
-          <button type="submit" className="submit-main-btn">Publish Advanced Recipe</button>
-        </form>
-      )}
-
-      {viewMode === 'vault' && <hr />}
-
-      <div className="recipe-list">
-        {recipes.length === 0 ? (
-           <p className="loading-text">
-             {viewMode === 'vault' && "Your vault is empty. Add a recipe above!"}
-             {viewMode === 'feed' && "Your feed is empty. Follow some chefs in the Explore tab!"}
-             {viewMode === 'explore' && "There are no other recipes on the platform right now!"}
-             {viewMode === 'chefProfile' && "This chef hasn't posted any recipes yet!"}
-           </p>
-        ) : null}
-        
-        {recipes.map(recipe => {
-          const authorId = typeof recipe.author === 'object' ? recipe.author._id : recipe.author;
-          const isOwner = authorId === userProfile.id;
-          const isFollowing = followedChefs.some(chef => chef._id === authorId);
-
-          return (
-            <div key={recipe._id} className="recipe-card">
-              <div className="recipe-image-container">
-                <img 
-                  src={recipe.imageUrl || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600"} 
-                  alt={recipe.title}
-                  className="recipe-image"
-                  onError={(e) => { e.target.src = "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600"; }}
-                />
+      <div style={{ display: 'flex', maxWidth: '1400px', margin: '0 auto', padding: '0 30px', gap: '30px', alignItems: 'flex-start' }}>
+        {/* 👈 SIDEBAR */}
+        <div style={{ flex: '0 0 320px', backgroundColor: '#ffffff', padding: '25px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', position: 'sticky', top: '20px' }}>
+          {isEditingProfile ? (
+            <form onSubmit={handleProfileUpdateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              <h3 style={{ margin: 0 }}>Edit Profile</h3>
+              <input type="text" placeholder="Profile Image URL" value={profileFormData.profilePicture} onChange={(e) => setProfileFormData({...profileFormData, profilePicture: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+              <textarea placeholder="Write a bio..." rows="4" value={profileFormData.bio} onChange={(e) => setProfileFormData({...profileFormData, bio: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+              <div style={{ display: 'flex', gap: '10px' }}><button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#00a86b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Save</button><button type="button" onClick={() => setIsEditingProfile(false)} style={{ flex: 1, padding: '10px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button></div>
+            </form>
+          ) : (
+            <div style={{ textAlign: 'center' }}>
+              <img src={myFullProfile?.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} style={{ width: '100px', height: '100px', borderRadius: '50%', border: '4px solid #00a86b' }} />
+              <h3>@{userProfile.username}</h3>
+              <p>{myFullProfile?.bio || "No bio yet!"}</p>
+              
+              {/* 🌟 NEW: Gamification Badge & XP Bar */}
+              <div style={{ margin: '15px 0', padding: '10px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', textAlign: 'left' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                  <span style={{ fontSize: '14px', fontWeight: 'bold', color: '#00a86b' }}>Level {myFullProfile?.level || 1} Chef</span>
+                  <span style={{ fontSize: '12px', color: '#718096' }}>{myFullProfile?.xp || 0} XP</span>
+                </div>
+                {/* Visual Progress Bar (Fills up to 100 before leveling up) */}
+                <div style={{ width: '100%', height: '8px', backgroundColor: '#cbd5e1', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ width: `${(myFullProfile?.xp || 0) % 100}%`, height: '100%', backgroundColor: '#00a86b', transition: 'width 0.5s ease-in-out' }}></div>
+                </div>
               </div>
 
-              <div className="recipe-content">
-                <h2>{recipe.title}</h2>
-                <div className="recipe-info">
-                  <p><strong>Prep time:</strong> {recipe.prepTimeMinutes} mins</p>
-                  <p className="description">{recipe.description}</p>
-                  
-                  {recipe.ingredients && recipe.ingredients.length > 0 && (
-                    <div className="rendered-data-block">
-                      <h5>Ingredients Needed:</h5>
-                      <ul className="mini-render-list">
-                        {recipe.ingredients.map((ing, i) => <li key={i}>{ing.name}</li>)}
-                      </ul>
-                    </div>
-                  )}
+              <button onClick={() => setIsEditingProfile(true)} style={{ width: '100%', padding: '10px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Edit Profile</button>
+            </div>
+          )}
+        </div>
 
-                  {recipe.instructions && recipe.instructions.length > 0 && (
-                    <div className="rendered-data-block">
-                      <h5>Steps to Cook:</h5>
-                      <ol className="mini-render-list">
-                        {recipe.instructions.map((step, i) => {
-                          if (typeof step === 'object' && step !== null) return <li key={i}>{step.text || JSON.stringify(step)}</li>;
-                          return <li key={i}>{step}</li>;
-                        })}
-                      </ol>
-                    </div>
-                  )}
-                </div>
+        {/* 👉 MAIN CONTENT */}
+        <div style={{ flex: '1' }}>
+          {viewMode === 'explore' && (
+            <div style={{ marginBottom: '20px' }}>
+              <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', maxWidth: '600px', margin: '0 auto' }}>
+                <input 
+                  type="text" 
+                  placeholder="Search for a recipe title or ingredient..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{ flex: 1, padding: '12px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '16px' }}
+                />
+                <button 
+                  type="submit" 
+                  style={{ padding: '12px 24px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' }}
+                >
+                  Search
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => { setSearchQuery(''); fetchExploreRecipes(); }} 
+                  style={{ padding: '12px 16px', backgroundColor: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
+                >
+                  Clear
+                </button>
+              </form>
+            </div>
+          )}
 
-                <div className="reviews-container" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
-                  <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#333' }}>
-                    Comments & Ratings {recipe.reviews?.length > 0 ? `(${recipe.reviews.length})` : ''}
-                  </h4>
-                  
-                  {recipe.reviews && recipe.reviews.length > 0 ? (
-                    <div className="review-list" style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: '15px' }}>
-                      {recipe.reviews.map((rev, i) => (
-                        <div key={i} style={{ marginBottom: '10px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '6px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <strong style={{ fontSize: '13px', color: '#00a86b' }}>@{rev.user}</strong>
-                            <span style={{ fontSize: '12px' }}>{'⭐'.repeat(rev.rating)}</span>
-                          </div>
-                          <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#555' }}>"{rev.comment}"</p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '13px', color: '#888', fontStyle: 'italic' }}>No reviews yet. Be the first!</p>
-                  )}
-
-                  <form onSubmit={(e) => handleReviewSubmit(e, recipe._id)} style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
-                    <select value={reviewData[recipe._id]?.rating || 5} onChange={(e) => handleReviewChange(recipe._id, 'rating', e.target.value)} style={{ padding: '6px' }}>
-                      <option value="5">⭐⭐⭐⭐⭐</option>
-                      <option value="4">⭐⭐⭐⭐</option>
-                      <option value="3">⭐⭐⭐</option>
-                      <option value="2">⭐⭐</option>
-                      <option value="1">⭐</option>
-                    </select>
-                    <input type="text" placeholder="Leave a comment..." value={reviewData[recipe._id]?.comment || ''} onChange={(e) => handleReviewChange(recipe._id, 'comment', e.target.value)} style={{ width: '50%', padding: '6px' }} required />
-                    <button type="submit" style={{ padding: '6px', backgroundColor: '#00a86b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Post</button>
-                  </form>
-                </div>
-
-                <div className="card-footer" style={{ marginTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span 
-                    className="chef-name" 
-                    onClick={() => fetchChefProfile(authorId)}
-                    style={{ fontWeight: 'bold', color: '#3182ce', cursor: 'pointer', textDecoration: 'underline' }}
+          {/* HORIZONTAL PROFILES LIST (SOCIAL FEED) */}
+          {viewMode === 'feed' && followedChefs.length > 0 && (
+            <div style={{ marginBottom: '25px' }}>
+              <h3 style={{ color: '#2d3748', margin: '0 0 15px 0', fontSize: '18px' }}>Chefs You Follow</h3>
+              
+              <div style={{ display: 'flex', gap: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
+                {followedChefs.map(chef => (
+                  <div 
+                    key={chef._id} 
+                    onClick={() => fetchChefProfile(chef._id)}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', cursor: 'pointer' }}
                   >
-                    Chef: @{recipe.author?.username || 'Unknown'}
-                  </span>
-                  
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    {isOwner ? (
-                      <button className="delete-btn" onClick={() => handleDelete(recipe._id)}>Delete Post</button>
-                    ) : (
-                      <button 
-                        onClick={() => handleFollow(authorId, recipe.author?.username)}
-                        style={{ 
-                          padding: '8px 12px', 
-                          backgroundColor: isFollowing ? '#e2e8f0' : '#3182ce', 
-                          color: isFollowing ? '#4a5568' : 'white', 
-                          border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' 
-                        }}
+                    <img 
+                      src={chef.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
+                      alt={chef.username}
+                      style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #00a86b', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+                      onError={(e) => { e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png"; }}
+                    />
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '8px', color: '#4a5568' }}>
+                      @{chef.username}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <hr style={{ marginTop: '15px', borderTop: '1px solid #edf2f7' }} />
+            </div>
+          )}
+
+          {/* DEDICATED CHEF PROFILE HEADER */}
+          {viewMode === 'chefProfile' && selectedChefProfile && (
+            <div style={{ marginBottom: '30px', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+               <img 
+                  src={selectedChefProfile.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
+                  alt={selectedChefProfile.username}
+                  style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #00a86b', marginBottom: '15px' }}
+               />
+               <h2 style={{ margin: '0 0 10px 0', color: '#1a202c', fontSize: '28px' }}>@{selectedChefProfile.username}</h2>
+               <p style={{ margin: '0 auto 20px auto', color: '#4a5568', fontStyle: 'italic', maxWidth: '600px', fontSize: '16px' }}>
+                  {selectedChefProfile.bio || "This chef prefers to let their food do the talking. No bio yet!"}
+               </p>
+
+               <div style={{ display: 'flex', justifyContent: 'center', gap: '30px', marginBottom: '25px', fontSize: '18px' }}>
+                  <div><strong style={{ color: '#00a86b' }}>Lvl {selectedChefProfile.level || 1}</strong></div>
+                  <div><strong style={{ color: '#2d3748' }}>{selectedChefProfile.followers?.length || 0}</strong> Followers</div>
+                  <div><strong style={{ color: '#2d3748' }}>{selectedChefProfile.following?.length || 0}</strong> Following</div>
+                  <div><strong style={{ color: '#2d3748' }}>{recipes.length}</strong> Recipes</div>
+               </div>
+
+               {selectedChefProfile._id !== userProfile.id && (
+                 <button 
+                   onClick={() => handleFollow(selectedChefProfile._id, selectedChefProfile.username)}
+                   style={{ padding: '12px 30px', backgroundColor: followedChefs.some(c => c._id === selectedChefProfile._id) ? '#e2e8f0' : '#3182ce', color: followedChefs.some(c => c._id === selectedChefProfile._id) ? '#4a5568' : 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '16px' }}
+                 >
+                   {followedChefs.some(c => c._id === selectedChefProfile._id) ? 'Following' : 'Follow Chef'}
+                 </button>
+               )}
+            </div>
+          )}
+
+          {viewMode === 'vault' && (
+            <form className="recipe-form comprehensive-form" onSubmit={handleSubmit}>
+              <h3>Add New Comprehensive Recipe</h3>
+              <input name="title" placeholder="Recipe Title" value={formData.title} onChange={handleChange} required />
+              <input name="prepTimeMinutes" type="number" placeholder="Prep Time (mins)" value={formData.prepTimeMinutes} onChange={handleChange} required />
+              <input name="imageUrl" placeholder="Image URL (e.g. https://...jpg)" value={formData.imageUrl} onChange={handleChange} required={false} />
+              <textarea name="description" placeholder="Brief Summary/Description" value={formData.description} onChange={handleChange} required />
+              
+              <div className="form-section">
+                <h4>Ingredients Blueprint</h4>
+                <textarea placeholder="Example:&#10;200g Pasta&#10;2 Eggs" rows="3" value={ingredientsText} onChange={(e) => setIngredientsText(e.target.value)} required />
+              </div>
+
+              <div className="form-section">
+                <h4>Preparation Steps</h4>
+                <textarea placeholder="Example:&#10;Boil the water&#10;Cook the pasta" rows="3" value={instructionsText} onChange={(e) => setInstructionsText(e.target.value)} required />
+              </div>
+
+              <div className="form-section">
+                <h4>Tags</h4>
+                <input placeholder="Comma separated tags: Vegan, Dinner" value={tags} onChange={(e) => setTags(e.target.value)} />
+              </div>
+
+              <button type="submit" className="submit-main-btn">Publish Advanced Recipe</button>
+            </form>
+          )}
+
+          {viewMode === 'vault' && <hr />}
+
+          <div className="recipe-list">
+            {Array.isArray(recipes) && recipes.length === 0 ? (
+               <p className="loading-text">
+                 {viewMode === 'vault' && "Your vault is empty. Add a recipe above!"}
+                 {viewMode === 'feed' && "Your feed is empty. Follow some chefs in the Explore tab!"}
+                 {viewMode === 'explore' && "There are no other recipes on the platform right now!"}
+                 {viewMode === 'chefProfile' && "This chef hasn't posted any recipes yet!"}
+               </p>
+            ) : null}
+            
+            {Array.isArray(recipes) && recipes.map(recipe => {
+              const authorId = typeof recipe.author === 'object' ? recipe.author._id : recipe.author;
+              const isOwner = authorId === userProfile.id;
+              const isFollowing = Array.isArray(followedChefs) && followedChefs.some(chef => chef._id === authorId);
+
+              return (
+                <div key={recipe._id} className="recipe-card">
+                  <div className="recipe-image-container">
+                    <img 
+                      src={recipe.imageUrl || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600"} 
+                      alt={recipe.title}
+                      className="recipe-image"
+                      onError={(e) => { e.target.src = "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600"; }}
+                    />
+                  </div>
+
+                  <div className="recipe-content">
+                    <h2>{recipe.title}</h2>
+                    <div className="recipe-info">
+                      <p><strong>Prep time:</strong> {recipe.prepTimeMinutes} mins</p>
+                      <p className="description">{recipe.description}</p>
+                      
+                      {recipe.ingredients && recipe.ingredients.length > 0 && (
+                        <div className="rendered-data-block">
+                          <h5>Ingredients Needed:</h5>
+                          <ul className="mini-render-list">
+                            {recipe.ingredients.map((ing, i) => <li key={i}>{ing.name}</li>)}
+                          </ul>
+                        </div>
+                      )}
+
+                      {recipe.instructions && recipe.instructions.length > 0 && (
+                        <div className="rendered-data-block">
+                          <h5>Steps to Cook:</h5>
+                          <ol className="mini-render-list">
+                            {recipe.instructions.map((step, i) => {
+                              if (typeof step === 'object' && step !== null) return <li key={i}>{step.text || JSON.stringify(step)}</li>;
+                              return <li key={i}>{step}</li>;
+                            })}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="reviews-container" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
+                      <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#333' }}>
+                        Comments & Ratings {recipe.reviews?.length > 0 ? `(${recipe.reviews.length})` : ''}
+                      </h4>
+                      
+                      {recipe.reviews && recipe.reviews.length > 0 ? (
+                        <div className="review-list" style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: '15px' }}>
+                          {recipe.reviews.map((rev, i) => (
+                            <div key={i} style={{ marginBottom: '10px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '6px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <strong style={{ fontSize: '13px', color: '#00a86b' }}>@{rev.user}</strong>
+                                <span style={{ fontSize: '12px' }}>{'⭐'.repeat(rev.rating)}</span>
+                              </div>
+                              <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#555' }}>"{rev.comment}"</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: '13px', color: '#888', fontStyle: 'italic' }}>No reviews yet. Be the first!</p>
+                      )}
+
+                      <form onSubmit={(e) => handleReviewSubmit(e, recipe._id)} style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
+                        <select value={reviewData[recipe._id]?.rating || 5} onChange={(e) => handleReviewChange(recipe._id, 'rating', e.target.value)} style={{ padding: '6px' }}>
+                          <option value="5">⭐⭐⭐⭐⭐</option>
+                          <option value="4">⭐⭐⭐⭐</option>
+                          <option value="3">⭐⭐⭐</option>
+                          <option value="2">⭐⭐</option>
+                          <option value="1">⭐</option>
+                        </select>
+                        <input type="text" placeholder="Leave a comment..." value={reviewData[recipe._id]?.comment || ''} onChange={(e) => handleReviewChange(recipe._id, 'comment', e.target.value)} style={{ width: '50%', padding: '6px' }} required />
+                        <button type="submit" style={{ padding: '6px', backgroundColor: '#00a86b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Post</button>
+                      </form>
+                    </div>
+
+                    <div className="card-footer" style={{ marginTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span 
+                        className="chef-name" 
+                        onClick={() => fetchChefProfile(authorId)}
+                        style={{ fontWeight: 'bold', color: '#3182ce', cursor: 'pointer', textDecoration: 'underline' }}
                       >
-                        {isFollowing ? 'Following' : 'Follow Chef'}
-                      </button>
-                    )}
+                        Chef: @{recipe.author?.username || 'Unknown'}
+                      </span>
+                      
+                      <div style={{ display: 'flex', gap: '10px' }}>
+                        {isOwner ? (
+                          <button className="delete-btn" onClick={() => handleDelete(recipe._id)}>Delete Post</button>
+                        ) : (
+                          <button 
+                            onClick={() => handleFollow(authorId, recipe.author?.username)}
+                            style={{ 
+                              padding: '8px 12px', 
+                              backgroundColor: isFollowing ? '#e2e8f0' : '#3182ce', 
+                              color: isFollowing ? '#4a5568' : 'white', 
+                              border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' 
+                            }}
+                          >
+                            {isFollowing ? 'Following' : 'Follow Chef'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
