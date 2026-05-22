@@ -52,6 +52,17 @@ function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileFormData, setProfileFormData] = useState({ bio: '', profilePicture: '' });
 
+  // 📁 FILE UPLOAD HANDLER
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setProfileFormData({ ...profileFormData, profilePicture: reader.result });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const fetchMyProfile = () => {
     if (!userProfile.id) return;
     fetch(`https://recipebox-api-yz4h.onrender.com/api/users/${userProfile.id}`, { headers: { 'Authorization': `Bearer ${token}` }})
@@ -360,8 +371,9 @@ function App() {
         alignItems: 'center',
         padding: '15px 30px',
         backgroundColor: '#ffffff',
-        boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-        marginBottom: '30px'
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        marginBottom: '35px',
+        borderRadius: '8px'
       }}>
         <h2 style={{ margin: 0, color: '#00a86b', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
           {viewMode === 'vault' && "🔒 My Private Recipe Vault"}
@@ -429,7 +441,7 @@ function App() {
           {isEditingProfile ? (
             <form onSubmit={handleProfileUpdateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <h3 style={{ margin: 0 }}>Edit Profile</h3>
-              <input type="file" placeholder="Profile Image URL" value={profileFormData.profilePicture} onChange={(e) => setProfileFormData({...profileFormData, profilePicture: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+              <input type="file" accept="image/*" onChange={handleFileChange} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
               <textarea placeholder="Write a bio..." rows="4" value={profileFormData.bio} onChange={(e) => setProfileFormData({...profileFormData, bio: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
               <div style={{ display: 'flex', gap: '10px' }}><button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#00a86b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Save</button><button type="button" onClick={() => setIsEditingProfile(false)} style={{ flex: 1, padding: '10px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button></div>
             </form>
@@ -459,7 +471,7 @@ function App() {
         {/* 👉 MAIN CONTENT */}
         <div style={{ flex: '1' }}>
           {viewMode === 'explore' && (
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ padding: '0 30px', marginBottom: '20px' }}>
               <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', maxWidth: '600px', margin: '0 auto' }}>
                 <input 
                   type="text" 
@@ -487,7 +499,7 @@ function App() {
 
           {/* HORIZONTAL PROFILES LIST (SOCIAL FEED) */}
           {viewMode === 'feed' && followedChefs.length > 0 && (
-            <div style={{ marginBottom: '25px' }}>
+            <div style={{ padding: '0 30px', marginBottom: '25px' }}>
               <h3 style={{ color: '#2d3748', margin: '0 0 15px 0', fontSize: '18px' }}>Chefs You Follow</h3>
               
               <div style={{ display: 'flex', gap: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
@@ -515,7 +527,7 @@ function App() {
 
           {/* DEDICATED CHEF PROFILE HEADER */}
           {viewMode === 'chefProfile' && selectedChefProfile && (
-            <div style={{ marginBottom: '30px', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+            <div style={{ margin: '0 30px 30px 30px', padding: '30px', backgroundColor: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
                <img 
                   src={selectedChefProfile.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
                   alt={selectedChefProfile.username}
@@ -605,7 +617,7 @@ function App() {
                       <p><strong>Prep time:</strong> {recipe.prepTimeMinutes} mins</p>
                       <p className="description">{recipe.description}</p>
                       
-                      {recipe.ingredients && recipe.ingredients.length > 0 && (
+                      {Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0 && (
                         <div className="rendered-data-block">
                           <h5>Ingredients Needed:</h5>
                           <ul className="mini-render-list">
@@ -614,7 +626,7 @@ function App() {
                         </div>
                       )}
 
-                      {recipe.instructions && recipe.instructions.length > 0 && (
+                      {Array.isArray(recipe.instructions) && recipe.instructions.length > 0 && (
                         <div className="rendered-data-block">
                           <h5>Steps to Cook:</h5>
                           <ol className="mini-render-list">
@@ -632,7 +644,7 @@ function App() {
                         Comments & Ratings {recipe.reviews?.length > 0 ? `(${recipe.reviews.length})` : ''}
                       </h4>
                       
-                      {recipe.reviews && recipe.reviews.length > 0 ? (
+                      {Array.isArray(recipe.reviews) && recipe.reviews.length > 0 ? (
                         <div className="review-list" style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: '15px' }}>
                           {recipe.reviews.map((rev, i) => (
                             <div key={i} style={{ marginBottom: '10px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '6px' }}>
