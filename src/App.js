@@ -7,11 +7,11 @@ function App() {
   const [token, setToken] = useState(sessionStorage.getItem('token') || '');
   const [isRegistering, setIsRegistering] = useState(false);
   
-  // 🌟 State can now be 'vault', 'feed', or 'explore'
   const [viewMode, setViewMode] = useState('vault');
-  
-  // 🌟 NEW: Search state
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // 🌟 NEW: State to hold the profiles of chefs you follow
+  const [followedChefs, setFollowedChefs] = useState([]);
 
   // DYNAMIC PAYLOAD EXTRACTOR
   const getUserDetails = () => {
@@ -62,23 +62,31 @@ function App() {
       .catch(error => console.error("Error fetching data:", error));
   };
 
-  // 🌐 FETCH SOCIAL FEED (Recipes from followed chefs)
+  // 🌐 FETCH SOCIAL FEED & CHEF PROFILES
   const fetchSocialFeed = () => {
+    // 1. Fetch the Recipes
     fetch('https://recipebox-api-yz4h.onrender.com/api/recipes/feed', { 
       headers: { 'Authorization': `Bearer ${token}` }
     })
-      .then(response => {
-        if (!response.ok) throw new Error("Feed fetch failed");
-        return response.json();
-      })
+      .then(res => res.json())
       .then(data => {
         setRecipes(data);
         setViewMode('feed');
       })
       .catch(error => console.error("Error fetching feed:", error));
+
+    // 2. 🌟 NEW: Fetch the Chef Profiles for the top carousel
+    fetch('https://recipebox-api-yz4h.onrender.com/api/users/following', { 
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if(Array.isArray(data)) setFollowedChefs(data);
+      })
+      .catch(error => console.error("Error fetching chefs:", error));
   };
 
-  // 🔍 FETCH EXPLORE FEED (All other chefs on the platform)
+  // 🔍 FETCH EXPLORE FEED
   const fetchExploreRecipes = () => {
     fetch('https://recipebox-api-yz4h.onrender.com/api/recipes/explore', { 
       headers: { 'Authorization': `Bearer ${token}` }
@@ -97,7 +105,7 @@ function App() {
   // 🔎 SEARCH RECIPES
   const handleSearch = (e) => {
     e.preventDefault();
-    if (!searchQuery.trim()) return; // Don't search if the box is empty
+    if (!searchQuery.trim()) return; 
 
     fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?query=${searchQuery}`, {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -108,12 +116,11 @@ function App() {
     })
     .then(data => {
       setRecipes(data);
-      setViewMode('explore'); // Keep them in the explore view to see results
+      setViewMode('explore'); 
     })
     .catch(error => console.error("Error searching:", error));
   };
 
-  // Run on initial login
   useEffect(() => {
     if (token) fetchVaultRecipes();
   }, [token]);
@@ -184,7 +191,6 @@ function App() {
     })
     .then(data => {
       alert(data.message); 
-      // Refresh whichever view we are currently looking at
       if (viewMode === 'explore') fetchExploreRecipes();
       else if (viewMode === 'feed') fetchSocialFeed();
       else fetchVaultRecipes();
@@ -312,7 +318,6 @@ function App() {
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
           
-          {/* NAVIGATION BUTTONS */}
           <div style={{ display: 'flex', gap: '10px' }}>
              <button 
                 onClick={fetchVaultRecipes}
@@ -364,7 +369,6 @@ function App() {
         </div>
       </div>
 
-      {/* 🌟 NEW: SEARCH BAR (ONLY IN EXPLORE VIEW) */}
       {viewMode === 'explore' && (
         <div style={{ padding: '0 30px', marginBottom: '20px' }}>
           <form onSubmit={handleSearch} style={{ display: 'flex', gap: '10px', maxWidth: '600px', margin: '0 auto' }}>
@@ -383,7 +387,7 @@ function App() {
             </button>
             <button 
               type="button" 
-              onClick={() => { setSearchQuery(''); fetchExploreRecipes(); }} // Clear search and reset
+              onClick={() => { setSearchQuery(''); fetchExploreRecipes(); }} 
               style={{ padding: '12px 16px', backgroundColor: '#e2e8f0', color: '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer' }}
             >
               Clear
@@ -392,7 +396,30 @@ function App() {
         </div>
       )}
 
-      {/* ONLY SHOW CREATION FORM IN VAULT VIEW */}
+      {/* 🌟 NEW: HORIZONTAL PROFILES LIST (ONLY IN SOCIAL FEED) */}
+      {viewMode === 'feed' && followedChefs.length > 0 && (
+        <div style={{ padding: '0 30px', marginBottom: '25px' }}>
+          <h3 style={{ color: '#2d3748', margin: '0 0 15px 0', fontSize: '18px' }}>Chefs You Follow</h3>
+          
+          <div style={{ display: 'flex', gap: '25px', overflowX: 'auto', paddingBottom: '10px' }}>
+            {followedChefs.map(chef => (
+              <div key={chef._id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '80px', cursor: 'pointer' }}>
+                <img 
+                  src={chef.profilePicture || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} 
+                  alt={chef.username}
+                  style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #00a86b', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+                  onError={(e) => { e.target.src = "https://cdn-icons-png.flaticon.com/512/149/149071.png"; }}
+                />
+                <span style={{ fontSize: '13px', fontWeight: 'bold', marginTop: '8px', color: '#4a5568' }}>
+                  @{chef.username}
+                </span>
+              </div>
+            ))}
+          </div>
+          <hr style={{ marginTop: '15px', borderTop: '1px solid #edf2f7' }} />
+        </div>
+      )}
+
       {viewMode === 'vault' && (
         <form className="recipe-form comprehensive-form" onSubmit={handleSubmit}>
           <h3>Add New Comprehensive Recipe</h3>
@@ -521,7 +548,8 @@ function App() {
                         onClick={() => handleFollow(authorId, recipe.author?.username)}
                         style={{ padding: '8px 12px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                       >
-                        Follow Chef
+                        {/* Dynamic button text! If we are in the feed, we must be following them, so show 'Unfollow' */}
+                        {viewMode === 'feed' ? 'Unfollow Chef' : 'Follow Chef'}
                       </button>
                     )}
                   </div>
