@@ -429,7 +429,7 @@ function App() {
           {isEditingProfile ? (
             <form onSubmit={handleProfileUpdateSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
               <h3 style={{ margin: 0 }}>Edit Profile</h3>
-              <input type="text" placeholder="Profile Image URL" value={profileFormData.profilePicture} onChange={(e) => setProfileFormData({...profileFormData, profilePicture: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+              <input type="file" placeholder="Profile Image URL" value={profileFormData.profilePicture} onChange={(e) => setProfileFormData({...profileFormData, profilePicture: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
               <textarea placeholder="Write a bio..." rows="4" value={profileFormData.bio} onChange={(e) => setProfileFormData({...profileFormData, bio: e.target.value})} style={{ padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
               <div style={{ display: 'flex', gap: '10px' }}><button type="submit" style={{ flex: 1, padding: '10px', backgroundColor: '#00a86b', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Save</button><button type="button" onClick={() => setIsEditingProfile(false)} style={{ flex: 1, padding: '10px', backgroundColor: '#e2e8f0', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>Cancel</button></div>
             </form>
