@@ -52,13 +52,25 @@ function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileFormData, setProfileFormData] = useState({ bio: '', profilePicture: '' });
 
-  // 📁 FILE UPLOAD HANDLER
+  // 📁 IMPROVED FILE UPLOAD HANDLER (Compresses to prevent 413 error)
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => {
-      setProfileFormData({ ...profileFormData, profilePicture: reader.result });
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 300; 
+        const scaleSize = MAX_WIDTH / img.width;
+        canvas.width = MAX_WIDTH;
+        canvas.height = img.height * scaleSize;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.5); 
+        setProfileFormData({ ...profileFormData, profilePicture: dataUrl });
+      };
+      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
   };
@@ -158,16 +170,25 @@ function App() {
     .catch(error => console.error("Error searching:", error));
   };
 
-  const handleProfileUpdateSubmit = (e) => {
+  const handleProfileUpdateSubmit = async (e) => {
     e.preventDefault();
-    fetch('https://recipebox-api-yz4h.onrender.com/api/users/update-profile', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify(profileFormData)
-    })
-    .then(res => res.json())
-    .then(updatedData => { setMyFullProfile(updatedData); setIsEditingProfile(false); })
-    .catch(err => alert("Failed to update profile"));
+    try {
+      const response = await fetch('https://recipebox-api-yz4h.onrender.com/api/users/update-profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(profileFormData)
+      });
+      if (response.ok) {
+        const updatedData = await response.json();
+        setMyFullProfile(updatedData);
+        setIsEditingProfile(false);
+        alert("Profile updated!");
+      } else {
+        alert("Failed to update profile.");
+      }
+    } catch (err) {
+      alert("Network error, try again.");
+    }
   };
 
   useEffect(() => {
