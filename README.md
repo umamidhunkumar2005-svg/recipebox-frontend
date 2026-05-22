@@ -18,6 +18,16 @@ A robust, full-stack recipe sharing platform built as a capstone internship proj
 * **Social Interaction:** Integrated 5-star rating system and comment threads on individual recipe cards.
 * **Authentication:** Secure user registration, login flows, and isolated private recipe vaults.
 
+## 📖 API Documentation
+### Search & Discovery Endpoints
+**GET /api/recipes/search**
+* **Description:** Fetches recipes based on keyword or tag filters. Requires JWT Authorization header.
+* **Query Parameters:**
+  * `query` (string): Searches recipe titles and descriptions for text matches. 
+    * *Example Request:* `GET /api/recipes/search?query=pasta`
+  * `tag` (string): Filters recipes by a specific discovery tag. 
+    * *Example Request:* `GET /api/recipes/search?tag=Vegan`
+    
 ## 💻 Local Setup Instructions
 1. Unzip the project folder.
 2. Open a terminal in the `recipebox-backend` folder, run `npm install`, then run `npm start` (or `node server.js`) to boot the backend.

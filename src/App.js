@@ -4,14 +4,15 @@ import './App.css';
 
 function App() {
   const [recipes, setRecipes] = useState([]);
-  // UPDATED: Now uses sessionStorage so each tab has isolated memory!
   const [token, setToken] = useState(sessionStorage.getItem('token') || '');
   const [isRegistering, setIsRegistering] = useState(false);
   
+  // 🌟 NEW: State to track which view the user is on ('vault' or 'feed')
+  const [viewMode, setViewMode] = useState('vault');
+
   // DYNAMIC PAYLOAD EXTRACTOR
-  // Safely parses the JWT token to fetch the logged-in user's true data fields
   const getUserDetails = () => {
-    if (!token) return { username: 'Guest Chef', email: 'Not Logged In' };
+    if (!token) return { username: 'Guest Chef', email: 'Not Logged In', id: null };
     try {
       const base64Url = token.split('.')[1];
       const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
@@ -20,63 +21,63 @@ function App() {
       }).join(''));
       
       const decoded = JSON.parse(jsonPayload);
-      console.log("Verified Profile Token Payload:", decoded); // Open browser console (F12) to audit this!
-      
       return {
         username: decoded.username || decoded.user?.username || 'Active Chef',
-        email: decoded.email || decoded.user?.email || 'No Email Verified'
+        email: decoded.email || decoded.user?.email || 'No Email Verified',
+        id: decoded.id || decoded.user?.id || null // Extracting ID for Follow logic
       };
     } catch (e) {
-      return { username: 'Active Chef', email: 'Connected Securely' };
+      return { username: 'Active Chef', email: 'Connected Securely', id: null };
     }
   };
 
   const userProfile = getUserDetails();
-
-  // Auth Form State
   const [authData, setAuthData] = useState({ username: '', email: '', password: '' });
   
-  // FORM PRODUCTION STATES
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    prepTimeMinutes: '',
-    imageUrl: ''
+    title: '', description: '', prepTimeMinutes: '', imageUrl: ''
   });
   
   const [ingredientsText, setIngredientsText] = useState('');
   const [instructionsText, setInstructionsText] = useState('');
   const [tags, setTags] = useState('');
-
-  // PHASE 3: REVIEW STATE TRACKING
   const [reviewData, setReviewData] = useState({});
 
-  // 🔒 THE PRIVATE VAULT FILTER 🔒
-  const fetchRecipes = () => {
-    fetch('https://recipebox-api-yz4h.onrender.com/api/recipes', {
-      headers: {
-        'Authorization': `Bearer ${token}` // <-- THE SECURITY PASS
-      }
+  // 🔒 FETCH PRIVATE VAULT
+  const fetchVaultRecipes = () => {
+    fetch('https://recipebox-api-yz4h.onrender.com/api/recipes', { 
+      headers: { 'Authorization': `Bearer ${token}` }
     })
       .then(response => {
         if (!response.ok) throw new Error("Unauthorized or server error");
         return response.json();
       })
       .then(data => {
-        // Look at every recipe from the cloud. Only keep the ones where 
-        // the author's username perfectly matches your current profile username.
-        const myPrivateRecipes = data.filter(recipe => 
-          recipe.author?.username === userProfile.username
-        );
-        
-        // Save ONLY your private recipes to the screen
-        setRecipes(myPrivateRecipes);
+        setRecipes(data);
+        setViewMode('vault');
       })
       .catch(error => console.error("Error fetching data:", error));
   };
 
+  // 🌐 FETCH SOCIAL FEED (Recipes from followed chefs)
+  const fetchSocialFeed = () => {
+    fetch('https://recipebox-api-yz4h.onrender.com/api/recipes/feed', { 
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+      .then(response => {
+        if (!response.ok) throw new Error("Feed fetch failed");
+        return response.json();
+      })
+      .then(data => {
+        setRecipes(data);
+        setViewMode('feed');
+      })
+      .catch(error => console.error("Error fetching feed:", error));
+  };
+
+  // Run on initial login
   useEffect(() => {
-    if (token) fetchRecipes();
+    if (token) fetchVaultRecipes();
   }, [token]);
 
   const handleAuthChange = (e) => setAuthData({ ...authData, [e.target.name]: e.target.value });
@@ -97,7 +98,6 @@ function App() {
     })
     .then(data => {
       if (data.token) {
-        // UPDATED: Saving to sessionStorage
         sessionStorage.setItem('token', data.token);
         setToken(data.token);
         setAuthData({ username: '', email: '', password: '' });
@@ -106,18 +106,14 @@ function App() {
         if (isRegistering) setIsRegistering(false);
       }
     })
-    .catch(error => {
-      console.error("Auth Error:", error);
-      alert("Error: Check your credentials or server connection.");
-    });
+    .catch(error => alert("Error: Check your credentials or server connection."));
   };
 
   const handleLogout = () => {
-    // UPDATED: Removing from sessionStorage
     sessionStorage.removeItem('token');
     setToken('');
     setRecipes([]);
-    window.location.reload(); // Hard flush to break out of persistent states
+    window.location.reload(); 
   };
 
   const handleDelete = (id) => {
@@ -128,74 +124,35 @@ function App() {
       })
       .then(async response => {
         if (response.ok) {
-          fetchRecipes(); 
+          viewMode === 'vault' ? fetchVaultRecipes() : fetchSocialFeed(); 
         } else {
           const errorData = await response.json();
           alert(`Backend says: ${errorData.message}`);
         }
       })
-      .catch(error => {
-        console.error("Error:", error);
-        alert("Server connection failed. Is the backend running?");
-      });
+      .catch(error => alert("Server connection failed. Is the backend running?"));
     }
   };
 
-  const handleTagClick = (tagWord) => {
-    fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?tag=${tagWord}`, {
-      headers: {
-        'Authorization': `Bearer ${token}` // <-- THE SECURITY PASS
-      }
-    })
-      .then(res => {
-        if (!res.ok) throw new Error("Tag filter failed");
-        return res.json();
-      })
-      .then(data => {
-        // Apply the same private filter to search results!
-        const myFilteredRecipes = data.filter(recipe => 
-          recipe.author?.username === userProfile.username
-        );
-        setRecipes(myFilteredRecipes);
-      })
-      .catch(err => console.error(err));
-  };
-
-  // PHASE 3: REVIEW HANDLERS
-  const handleReviewChange = (recipeId, field, value) => {
-    setReviewData(prev => ({
-      ...prev,
-      [recipeId]: { ...prev[recipeId], [field]: value }
-    }));
-  };
-
-  const handleReviewSubmit = (e, recipeId) => {
-    e.preventDefault();
-    const review = reviewData[recipeId];
-    if (!review || !review.comment) return;
-
-    const finalReview = {
-      rating: review.rating || 5,
-      comment: review.comment
-    };
-
-    fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/${recipeId}/reviews`, {
+  // 🌟 NEW: FOLLOW/UNFOLLOW LOGIC
+  const handleFollow = (targetChefId, targetUsername) => {
+    fetch(`https://recipebox-api-yz4h.onrender.com/api/users/${targetChefId}/follow`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify(finalReview)
+      headers: { 'Authorization': `Bearer ${token}` }
     })
     .then(res => {
-      if(!res.ok) throw new Error("Failed to add review");
+      if (!res.ok) throw new Error("Follow action failed");
       return res.json();
     })
-    .then(() => {
-      fetchRecipes(); 
-      setReviewData(prev => ({ ...prev, [recipeId]: { rating: 5, comment: '' } })); 
+    .then(data => {
+      alert(data.message); // Will say "You are now following..."
+      // Refresh the current view
+      viewMode === 'vault' ? fetchVaultRecipes() : fetchSocialFeed();
     })
-    .catch(err => console.error(err));
+    .catch(err => {
+      console.error(err);
+      alert("Failed to follow chef.");
+    });
   };
 
   const handleSubmit = (e) => {
@@ -237,15 +194,40 @@ function App() {
       return response.json();
     })
     .then(() => {
-      fetchRecipes();
+      fetchVaultRecipes(); // Always switch to vault view after creating to see the new post
       setFormData({ title: '', description: '', prepTimeMinutes: '', imageUrl: '' });
       setIngredientsText('');
       setInstructionsText('');
       setTags('');
     })
-    .catch(error => {
-      console.error("Error creating recipe:", error);
-      alert("Submission error. Check your console logs.");
+    .catch(error => alert("Submission error. Check your console logs."));
+  };
+
+  // Handle Review Actions
+  const handleReviewChange = (recipeId, field, value) => {
+    setReviewData(prev => ({
+      ...prev,
+      [recipeId]: { ...prev[recipeId], [field]: value }
+    }));
+  };
+
+  const handleReviewSubmit = (e, recipeId) => {
+    e.preventDefault();
+    const review = reviewData[recipeId];
+    if (!review || !review.comment) return;
+
+    fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/${recipeId}/reviews`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ rating: review.rating || 5, comment: review.comment })
+    })
+    .then(res => res.json())
+    .then(() => {
+      viewMode === 'vault' ? fetchVaultRecipes() : fetchSocialFeed();
+      setReviewData(prev => ({ ...prev, [recipeId]: { rating: 5, comment: '' } })); 
     });
   };
 
@@ -270,7 +252,7 @@ function App() {
 
   return (
     <div className="App">
-      {/* --- RE-ARCHITECTED DYNAMIC DETAILS HEADER --- */}
+      {/* HEADER SECTION */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -282,238 +264,194 @@ function App() {
         borderRadius: '8px'
       }}>
         <h2 style={{ margin: 0, color: '#00a86b', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          🔒 My Private Recipe Vault
+          {viewMode === 'vault' ? "🔒 My Private Recipe Vault" : "🌐 My Social Feed"}
         </h2>
         
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ textAlign: 'right', borderRight: '2px solid #edf2f7', paddingRight: '20px' }}>
-            <span style={{ display: 'block', fontSize: '10px', color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+          
+          {/* NAVIGATION BUTTONS */}
+          <div style={{ display: 'flex', gap: '10px' }}>
+             <button 
+                onClick={fetchVaultRecipes}
+                style={{
+                  padding: '8px 15px', backgroundColor: viewMode === 'vault' ? '#00a86b' : '#e2e8f0',
+                  color: viewMode === 'vault' ? 'white' : '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
+                }}
+             >
+               My Vault
+             </button>
+             <button 
+                onClick={fetchSocialFeed}
+                style={{
+                  padding: '8px 15px', backgroundColor: viewMode === 'feed' ? '#00a86b' : '#e2e8f0',
+                  color: viewMode === 'feed' ? 'white' : '#4a5568', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold'
+                }}
+             >
+               Social Feed
+             </button>
+          </div>
+
+          <div style={{ textAlign: 'right', borderRight: '2px solid #edf2f7', paddingRight: '20px', paddingLeft: '20px' }}>
+            <span style={{ display: 'block', fontSize: '10px', color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold' }}>
               Authenticated User
             </span>
             <div style={{ fontWeight: '700', color: '#2d3748', fontSize: '15px' }}>
               @{userProfile.username}
             </div>
-            <span style={{ fontSize: '12px', color: '#718096', fontStyle: 'italic' }}>
-              {userProfile.email}
-            </span>
           </div>
           
           <button 
             onClick={handleLogout}
             style={{
-              padding: '10px 18px',
-              backgroundColor: '#dc2626',
-              color: 'white',
-              border: 'none',
-              borderRadius: '6px',
-              cursor: 'pointer',
-              fontWeight: '600',
-              fontSize: '13px',
-              boxShadow: '0 2px 4px rgba(220, 38, 38, 0.2)',
-              transition: 'background-color 0.2s'
+              padding: '10px 18px', backgroundColor: '#dc2626', color: 'white',
+              border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600'
             }}
-            onMouseOver={(e) => e.target.style.backgroundColor = '#b91c1c'}
-            onMouseOut={(e) => e.target.style.backgroundColor = '#dc2626'}
           >
-            Log Out / Clear Cache
+            Log Out
           </button>
         </div>
       </div>
 
-      <form className="recipe-form comprehensive-form" onSubmit={handleSubmit}>
-        <h3>Add New Comprehensive Recipe</h3>
-        <input name="title" placeholder="Recipe Title" value={formData.title} onChange={handleChange} required />
-        <input name="prepTimeMinutes" type="number" placeholder="Prep Time (mins)" value={formData.prepTimeMinutes} onChange={handleChange} required />
-        <input name="imageUrl" placeholder="Image URL (e.g. https://...jpg)" value={formData.imageUrl} onChange={handleChange} required={false} />
-        <textarea name="description" placeholder="Brief Summary/Description" value={formData.description} onChange={handleChange} required />
-        
-        <div className="form-section">
-          <h4>Ingredients Blueprint (One per line)</h4>
-          <textarea 
-            placeholder="Example:&#10;200g Pasta&#10;2 Eggs" 
-            rows="3"
-            value={ingredientsText} 
-            onChange={(e) => setIngredientsText(e.target.value)} 
-            required 
-          />
-        </div>
+      {/* ONLY SHOW CREATION FORM IN VAULT VIEW */}
+      {viewMode === 'vault' && (
+        <form className="recipe-form comprehensive-form" onSubmit={handleSubmit}>
+          <h3>Add New Comprehensive Recipe</h3>
+          <input name="title" placeholder="Recipe Title" value={formData.title} onChange={handleChange} required />
+          <input name="prepTimeMinutes" type="number" placeholder="Prep Time (mins)" value={formData.prepTimeMinutes} onChange={handleChange} required />
+          <input name="imageUrl" placeholder="Image URL (e.g. https://...jpg)" value={formData.imageUrl} onChange={handleChange} required={false} />
+          <textarea name="description" placeholder="Brief Summary/Description" value={formData.description} onChange={handleChange} required />
+          
+          <div className="form-section">
+            <h4>Ingredients Blueprint</h4>
+            <textarea placeholder="Example:&#10;200g Pasta&#10;2 Eggs" rows="3" value={ingredientsText} onChange={(e) => setIngredientsText(e.target.value)} required />
+          </div>
 
-        <div className="form-section">
-          <h4>Preparation Steps (One step per line)</h4>
-          <textarea 
-            placeholder="Example:&#10;Boil the water&#10;Cook the pasta" 
-            rows="3"
-            value={instructionsText} 
-            onChange={(e) => setInstructionsText(e.target.value)} 
-            required 
-          />
-        </div>
+          <div className="form-section">
+            <h4>Preparation Steps</h4>
+            <textarea placeholder="Example:&#10;Boil the water&#10;Cook the pasta" rows="3" value={instructionsText} onChange={(e) => setInstructionsText(e.target.value)} required />
+          </div>
 
-        <div className="form-section">
-          <h4>Search Engine Discovery Tags</h4>
-          <input placeholder="Comma separated tags: Vegan, Dinner, Gluten-Free" value={tags} onChange={(e) => setTags(e.target.value)} />
-        </div>
+          <div className="form-section">
+            <h4>Tags</h4>
+            <input placeholder="Comma separated tags: Vegan, Dinner" value={tags} onChange={(e) => setTags(e.target.value)} />
+          </div>
 
-        <button type="submit" className="submit-main-btn">Publish Advanced Recipe</button>
-      </form>
+          <button type="submit" className="submit-main-btn">Publish Advanced Recipe</button>
+        </form>
+      )}
 
-      <hr />
-
-      <div className="search-section-wrapper" style={{ maxWidth: '600px', margin: '30px auto', padding: '0 20px' }}>
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-          <input 
-            type="text"
-            placeholder="🔍 Search recipes by title or keyword..." 
-            style={{ 
-              width: '100%', padding: '12px 20px', fontSize: '16px', borderRadius: '30px', 
-              border: '2px solid #00a86b', outline: 'none', boxShadow: '0 4px 6px rgba(0,0,0,0.05)'
-            }}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val.trim() === '') fetchRecipes();
-              else {
-                fetch(`https://recipebox-api-yz4h.onrender.com/api/recipes/search?query=${val}`, {
-                  headers: {
-                    'Authorization': `Bearer ${token}` // <-- THE SECURITY PASS
-                  }
-                })
-                  .then(res => {
-                    if (!res.ok) throw new Error("Search filter failed");
-                    return res.json();
-                  })
-                  .then(data => {
-                    // Apply the same private filter to the search bar!
-                    const myFilteredRecipes = data.filter(recipe => 
-                      recipe.author?.username === userProfile.username
-                    );
-                    setRecipes(myFilteredRecipes);
-                  })
-                  .catch(err => console.error(err));
-              }
-            }}
-          />
-        </div>
-      </div>
+      {viewMode === 'vault' && <hr />}
 
       <div className="recipe-list">
-        {recipes.length === 0 ? <p className="loading-text">No recipes found. Add your first one above!</p> : null}
+        {recipes.length === 0 ? (
+           <p className="loading-text">
+             {viewMode === 'vault' ? "Your vault is empty. Add a recipe above!" : "Your feed is empty. Follow some chefs to see their recipes!"}
+           </p>
+        ) : null}
         
-        {recipes.map(recipe => (
-          <div key={recipe._id} className="recipe-card">
-            <div className="recipe-image-container">
-              <img 
-                src={recipe.imageUrl || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600"} 
-                alt={recipe.title}
-                className="recipe-image"
-                onError={(e) => {
-                  e.target.src = "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600";
-                }}
-              />
-            </div>
+        {recipes.map(recipe => {
+          // Determine if the current logged-in user owns this recipe
+          // The recipe.author might be an object (if populated) or just an ID string
+          const authorId = typeof recipe.author === 'object' ? recipe.author._id : recipe.author;
+          const isOwner = authorId === userProfile.id;
 
-            <div className="recipe-content">
-              <h2>{recipe.title}</h2>
-              <div className="recipe-info">
-                <p><strong>Prep time:</strong> {recipe.prepTimeMinutes} mins</p>
-                <p className="description">{recipe.description}</p>
-                
-                {recipe.ingredients && Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0 && (
-                  <div className="rendered-data-block">
-                    <h5>Ingredients Needed:</h5>
-                    <ul className="mini-render-list">
-                      {recipe.ingredients.map((ing, i) => (
-                        <li key={i}>{ing.name}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {recipe.instructions && Array.isArray(recipe.instructions) && recipe.instructions.length > 0 && (
-                  <div className="rendered-data-block">
-                    <h5>Steps to Cook:</h5>
-                    <ol className="mini-render-list">
-                      {recipe.instructions.map((step, i) => {
-                        if (typeof step === 'object' && step !== null) return <li key={i}>{step.text || JSON.stringify(step)}</li>;
-                        return <li key={i}>{step}</li>;
-                      })}
-                    </ol>
-                  </div>
-                )}
-
-                {recipe.tags && Array.isArray(recipe.tags) && recipe.tags.length > 0 && (
-                  <div className="tag-pill-container" style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                    {recipe.tags.map((tag, i) => (
-                      <span 
-                        key={i} 
-                        className="tag-pill" 
-                        style={{ cursor: 'pointer', transition: 'transform 0.1s' }} 
-                        onClick={() => handleTagClick(tag)}
-                        title={`Click to filter by #${tag}`}
-                      >
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
+          return (
+            <div key={recipe._id} className="recipe-card">
+              <div className="recipe-image-container">
+                <img 
+                  src={recipe.imageUrl || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600"} 
+                  alt={recipe.title}
+                  className="recipe-image"
+                  onError={(e) => { e.target.src = "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=600"; }}
+                />
               </div>
 
-              {/* --- REVIEWS & COMMENTS SECTION --- */}
-              <div className="reviews-container" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
-                <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#333' }}>
-                  Comments & Ratings {recipe.reviews?.length > 0 ? `(${recipe.reviews.length})` : ''}
-                </h4>
-                
-                {recipe.reviews && recipe.reviews.length > 0 ? (
-                  <div className="review-list" style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: '15px' }}>
-                    {recipe.reviews.map((rev, i) => (
-                      <div key={i} style={{ marginBottom: '10px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '6px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <strong style={{ fontSize: '13px', color: '#00a86b' }}>@{rev.user}</strong>
-                          <span style={{ fontSize: '12px' }}>{'⭐'.repeat(rev.rating)}</span>
+              <div className="recipe-content">
+                <h2>{recipe.title}</h2>
+                <div className="recipe-info">
+                  <p><strong>Prep time:</strong> {recipe.prepTimeMinutes} mins</p>
+                  <p className="description">{recipe.description}</p>
+                  
+                  {recipe.ingredients && recipe.ingredients.length > 0 && (
+                    <div className="rendered-data-block">
+                      <h5>Ingredients Needed:</h5>
+                      <ul className="mini-render-list">
+                        {recipe.ingredients.map((ing, i) => <li key={i}>{ing.name}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {recipe.instructions && recipe.instructions.length > 0 && (
+                    <div className="rendered-data-block">
+                      <h5>Steps to Cook:</h5>
+                      <ol className="mini-render-list">
+                        {recipe.instructions.map((step, i) => {
+                          if (typeof step === 'object' && step !== null) return <li key={i}>{step.text || JSON.stringify(step)}</li>;
+                          return <li key={i}>{step}</li>;
+                        })}
+                      </ol>
+                    </div>
+                  )}
+                </div>
+
+                {/* --- REVIEWS SECTION --- */}
+                <div className="reviews-container" style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee' }}>
+                  <h4 style={{ margin: '0 0 10px 0', fontSize: '15px', color: '#333' }}>
+                    Comments & Ratings {recipe.reviews?.length > 0 ? `(${recipe.reviews.length})` : ''}
+                  </h4>
+                  
+                  {recipe.reviews && recipe.reviews.length > 0 ? (
+                    <div className="review-list" style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: '15px' }}>
+                      {recipe.reviews.map((rev, i) => (
+                        <div key={i} style={{ marginBottom: '10px', padding: '8px', backgroundColor: '#f9f9f9', borderRadius: '6px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <strong style={{ fontSize: '13px', color: '#00a86b' }}>@{rev.user}</strong>
+                            <span style={{ fontSize: '12px' }}>{'⭐'.repeat(rev.rating)}</span>
+                          </div>
+                          <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#555' }}>"{rev.comment}"</p>
                         </div>
-                        <p style={{ margin: '5px 0 0 0', fontSize: '13px', color: '#555' }}>"{rev.comment}"</p>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: '13px', color: '#888', fontStyle: 'italic' }}>No reviews yet. Be the first!</p>
+                  )}
+
+                  <form onSubmit={(e) => handleReviewSubmit(e, recipe._id)} style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
+                    <select value={reviewData[recipe._id]?.rating || 5} onChange={(e) => handleReviewChange(recipe._id, 'rating', e.target.value)} style={{ padding: '6px' }}>
+                      <option value="5">⭐⭐⭐⭐⭐</option>
+                      <option value="4">⭐⭐⭐⭐</option>
+                      <option value="3">⭐⭐⭐</option>
+                      <option value="2">⭐⭐</option>
+                      <option value="1">⭐</option>
+                    </select>
+                    <input type="text" placeholder="Leave a comment..." value={reviewData[recipe._id]?.comment || ''} onChange={(e) => handleReviewChange(recipe._id, 'comment', e.target.value)} style={{ width: '50%', padding: '6px' }} required />
+                    <button type="submit" style={{ padding: '6px', backgroundColor: '#00a86b', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Post</button>
+                  </form>
+                </div>
+
+                <div className="card-footer" style={{ marginTop: '15px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="chef-name" style={{ fontWeight: 'bold', color: '#2d3748' }}>
+                    Chef: {recipe.author?.username || 'Unknown'}
+                  </span>
+                  
+                  {/* Dynamic Action Buttons Based on Ownership */}
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    {isOwner ? (
+                      <button className="delete-btn" onClick={() => handleDelete(recipe._id)}>Delete Post</button>
+                    ) : (
+                      <button 
+                        onClick={() => handleFollow(authorId, recipe.author?.username)}
+                        style={{ padding: '8px 12px', backgroundColor: '#3182ce', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                      >
+                        Follow Chef
+                      </button>
+                    )}
                   </div>
-                ) : (
-                  <p style={{ fontSize: '13px', color: '#888', fontStyle: 'italic' }}>No reviews yet. Be the first!</p>
-                )}
-
-                <form onSubmit={(e) => handleReviewSubmit(e, recipe._id)} style={{ display: 'flex', gap: '8px', marginTop: '10px', alignItems: 'center' }}>
-                  <select 
-                    value={reviewData[recipe._id]?.rating || 5}
-                    onChange={(e) => handleReviewChange(recipe._id, 'rating', e.target.value)}
-                    style={{ flexShrink: 0, padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '12px', cursor: 'pointer' }}
-                  >
-                    <option value="5">⭐⭐⭐⭐⭐</option>
-                    <option value="4">⭐⭐⭐⭐</option>
-                    <option value="3">⭐⭐⭐</option>
-                    <option value="2">⭐⭐</option>
-                    <option value="1">⭐</option>
-                  </select>
-                  
-                  <input 
-                    type="text" 
-                    placeholder="Leave a comment..." 
-                    value={reviewData[recipe._id]?.comment || ''}
-                    onChange={(e) => handleReviewChange(recipe._id, 'comment', e.target.value)}
-                    style={{ width: '50%', flexGrow: 1, padding: '6px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '13px' }}
-                    required
-                  />
-                  
-                  <button type="submit" style={{ flexBasis: '60px', flexShrink: 0, padding: '6px 0', backgroundColor: '#00a86b', color: 'white', border: 'none', borderRadius: '4px', fontSize: '13px', cursor: 'pointer', textAlign: 'center' }}>
-                    Post
-                  </button>
-                </form>
-              </div>
-
-              <div className="card-footer" style={{ marginTop: '15px' }}>
-                <span className="chef-name">Chef: {recipe.author?.username || 'Unknown'}</span>
-                <button className="delete-btn" onClick={() => handleDelete(recipe._id)}>Delete</button>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
